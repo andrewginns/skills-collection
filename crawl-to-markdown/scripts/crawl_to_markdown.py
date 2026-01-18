@@ -30,7 +30,18 @@ def render_markdown(result) -> str:
         return markdown
     if markdown is None:
         return ""
+    if isinstance(markdown, dict):
+        return (
+            markdown.get("raw_markdown")
+            or markdown.get("markdown_with_citations")
+            or markdown.get("fit_markdown")
+            or ""
+        )
     return markdown.raw_markdown or ""
+
+
+def has_meaningful_content(markdown: str) -> bool:
+    return bool(markdown and markdown.strip())
 
 
 def build_run_config(selector: str, min_words: int) -> CrawlerRunConfig:
@@ -50,19 +61,26 @@ async def crawl_urls(urls: List[str], selector: str, min_words: int) -> List[obj
     )
     run_cfg = build_run_config(selector, min_words)
     fallback_cfg = build_run_config("article", min_words)
+    no_selector_cfg = build_run_config("", min_words)
 
     async with AsyncWebCrawler(config=browser_cfg) as crawler:
         if len(urls) == 1:
             result = await crawler.arun(urls[0], config=run_cfg)
-            if selector == "article, main, [role=main]" and not render_markdown(result):
-                result = await crawler.arun(urls[0], config=fallback_cfg)
+            if not has_meaningful_content(render_markdown(result)):
+                if selector == "article, main, [role=main]":
+                    result = await crawler.arun(urls[0], config=fallback_cfg)
+                if not has_meaningful_content(render_markdown(result)) and selector:
+                    result = await crawler.arun(urls[0], config=no_selector_cfg)
             return [result]
         results = await crawler.arun_many(urls, config=run_cfg)
-        if selector == "article, main, [role=main]":
-            for index, result in enumerate(results):
-                if render_markdown(result):
-                    continue
-                results[index] = await crawler.arun(urls[index], config=fallback_cfg)
+        for index, result in enumerate(results):
+            if has_meaningful_content(render_markdown(result)):
+                continue
+            if selector == "article, main, [role=main]":
+                result = await crawler.arun(urls[index], config=fallback_cfg)
+            if not has_meaningful_content(render_markdown(result)) and selector:
+                result = await crawler.arun(urls[index], config=no_selector_cfg)
+            results[index] = result
         return results
 
 
@@ -74,9 +92,12 @@ def print_result(url: str, result) -> bool:
         return False
 
     markdown = render_markdown(result)
-    if not markdown:
+    if not has_meaningful_content(markdown):
         print(f"URL: {url}")
-        print("ERROR: Crawl succeeded but no markdown was produced.")
+        print(
+            "ERROR: Crawl succeeded but no markdown was produced (or only whitespace). "
+            "Try --selector '' to disable CSS selection."
+        )
         print("---")
         return False
 
@@ -94,7 +115,7 @@ def main() -> int:
     parser.add_argument(
         "--selector",
         default="article, main, [role=main]",
-        help="CSS selector targeting the main content container.",
+        help="CSS selector targeting the main content container. Use '' to disable selection.",
     )
     parser.add_argument(
         "--min-words",

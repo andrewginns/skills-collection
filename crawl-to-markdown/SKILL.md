@@ -30,6 +30,32 @@ Or pipe a newline-delimited list:
 printf "https://example.com\nhttps://example.org\n" | uv run scripts/crawl_to_markdown.py
 ```
 
+## Troubleshooting
+
+### Crawl succeeds but output is blank
+
+Some sites don't match the default `--selector` and can return empty/whitespace Markdown.
+The script will retry without CSS selection automatically, but you can also force it explicitly:
+
+```bash
+uv run scripts/crawl_to_markdown.py --selector '' https://example.com
+```
+
+### uv cache permission errors
+
+If `uv` fails accessing its cache directory (e.g. `~/.cache/uv`), either point it at a
+writable cache directory:
+
+```bash
+uv --cache-dir .uv-cache run scripts/crawl_to_markdown.py https://example.com
+```
+
+Or avoid the cache entirely:
+
+```bash
+uv --no-cache run scripts/crawl_to_markdown.py https://example.com
+```
+
 ## Output format
 
 For each URL, the script prints a header and raw Markdown content:
