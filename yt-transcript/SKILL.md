@@ -14,7 +14,7 @@ Use this skill when you need the transcript/captions for a YouTube video.
 This script uses uv inline metadata. If `uv` is available, run:
 
 ```bash
-uv run scripts/youtube_transcript.py https://www.youtube.com/watch?v=VIDEO_ID
+uv run scripts/youtube_to_transcript.py https://www.youtube.com/watch?v=VIDEO_ID
 ```
 
 Provide a YouTube URL or an 11-character video ID.
