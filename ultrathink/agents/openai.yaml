@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ultrathink Planner"
+  short_description: "Plan-first deep reasoning via GPT-5.2 Pro"
+  default_prompt: "Use $ultrathink to plan this first, surface major forks early, and return a concrete execution plan."
