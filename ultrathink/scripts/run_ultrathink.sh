@@ -3,13 +3,19 @@ set -euo pipefail
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
-DEFAULT_MODEL="gpt-5.2-pro"
+DEFAULT_MODEL="gpt-5.4-pro"
 DEFAULT_API_BASE="https://api.openai.com/v1"
 DEFAULT_TIMEOUT_SEC=7200
 DEFAULT_POLL_INTERVAL_SEC=15
 DEFAULT_MAX_CONTEXT_CHARS=50000
 
-PLAN_FIRST_INSTRUCTIONS="You are an ultrathink planning assistant. Plan first and surface big forks early. Before recommending action, enumerate the major approaches, their tradeoffs, risks, and required assumptions. Then recommend the best path and provide a concrete execution plan."
+PLAN_FIRST_INSTRUCTIONS="You are a planning assistant, plan first and surface big forks early. Before recommending action, enumerate the major approaches, their tradeoffs, risks, and required assumptions. Then recommend the best path and provide a concrete execution plan.
+
+Output MUST have exactly these sections (with these headings):
+1) Plan summary
+2) Major forks and tradeoffs
+3) Recommended path
+4) Immediate next actions"
 
 usage() {
   cat <<'EOF'
@@ -28,20 +34,29 @@ Options:
   --max-context-chars <n>           Cap assembled input length (default: 50000).
   --resume-response-id <id>         Poll an existing response instead of submitting.
   --submit-only                     Submit and return response id without polling.
-  --model <id>                      Model id (default: gpt-5.2-pro).
+  --assemble-only                   Assemble prompt/payload and exit (no API call).
+  --model <id>                      Model id (default: gpt-5.4-pro).
   --service-tier <tier>             auto|default|flex|priority (default: priority).
   --reasoning-effort <effort>       none|minimal|low|medium|high|xhigh (default: high).
   --verbosity <level>               low|medium|high (default: medium).
   --poll-interval-sec <n>           Poll interval in seconds (default: 15).
-  --timeout-sec <n>                 Poll timeout in seconds (default: 3600).
+  --timeout-sec <n>                 Poll timeout in seconds (default: 7200).
   --api-base <url>                  API base URL (default: OPENAI_API_BASE or https://api.openai.com/v1).
   --metadata KEY=VALUE              Metadata pair (repeatable).
   --output-json <path>              Write final response JSON to file.
   --show-prompt                     Print assembled input text before submit.
+  --show-payload                    Print JSON payload before submit.
+  --artifacts-dir <dir>             Write artifacts into this directory.
+  --artifacts-root <dir>            Create a unique run directory under this root and write artifacts there.
+  --repo-artifacts                  Create a unique run directory under <git_root>/.codex/ultrathink and write artifacts there.
+  --cwd-artifacts                   Create a unique run directory under $PWD/.codex/ultrathink and write artifacts there.
+  --run-label <text>                Label included in auto-created run directory name.
+  --state-file <path>               Write response id to this file (default: .ultrathink_response_id).
+  --no-state-file                   Do not write a response id file.
   -h, --help                        Show this help message.
 
 Environment:
-  OPENAI_API_KEY                    Required.
+  OPENAI_API_KEY                    Required (unless --assemble-only is used).
   OPENAI_API_BASE                   Optional override for API base.
 EOF
 }
@@ -64,6 +79,73 @@ validate_int_ge_1() {
   local value="$2"
   [[ "$value" =~ ^[0-9]+$ ]] || fail "$name must be an integer >= 1"
   (( value >= 1 )) || fail "$name must be >= 1"
+}
+
+sanitize_label() {
+  local label="$1"
+  label="$(printf '%s' "$label" | trim)"
+  [[ -n "$label" ]] || return 0
+  label="$(printf '%s' "$label" | tr -cs 'A-Za-z0-9._-' '_' | sed -e 's/^_\\+//' -e 's/_\\+$//')"
+  label="${label:0:60}"
+  printf '%s' "$label"
+}
+
+write_artifact_text() {
+  local filename="$1"
+  local content="$2"
+  [[ -n "$ARTIFACTS_DIR" ]] || return 0
+  mkdir -p "$ARTIFACTS_DIR"
+  printf '%s' "$content" > "$ARTIFACTS_DIR/$filename"
+}
+
+write_artifact_json_pretty() {
+  local filename="$1"
+  local json="$2"
+  [[ -n "$ARTIFACTS_DIR" ]] || return 0
+  mkdir -p "$ARTIFACTS_DIR"
+  if jq -e . >/dev/null 2>&1 <<<"$json"; then
+    jq . <<<"$json" > "$ARTIFACTS_DIR/$filename"
+  else
+    printf '%s' "$json" > "$ARTIFACTS_DIR/$filename"
+  fi
+}
+
+init_artifacts_dir_if_configured() {
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    mkdir -p "$ARTIFACTS_DIR"
+    return 0
+  fi
+
+  local artifacts_root=""
+  local repo_root=""
+  if [[ "$CWD_ARTIFACTS" -eq 1 ]]; then
+    artifacts_root="$PWD/.codex/ultrathink"
+  elif [[ "$REPO_ARTIFACTS" -eq 1 ]]; then
+    require_cmd git
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || fail "--repo-artifacts requires running inside a git repo."
+    artifacts_root="$repo_root/.codex/ultrathink"
+  elif [[ -n "$ARTIFACTS_ROOT" ]]; then
+    artifacts_root="$ARTIFACTS_ROOT"
+  else
+    return 0
+  fi
+
+  mkdir -p "$artifacts_root"
+  local timestamp pid safe_label run_dir
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  pid="$$"
+  safe_label="$(sanitize_label "$RUN_LABEL")"
+  run_dir="ultrathink_${timestamp}_${pid}"
+  if [[ -n "$safe_label" ]]; then
+    run_dir="${run_dir}_${safe_label}"
+  fi
+
+  ARTIFACTS_DIR="$artifacts_root/$run_dir"
+  mkdir -p "$ARTIFACTS_DIR"
+
+  if [[ "$WRITE_STATE_FILE" -eq 1 && "$STATE_FILE_EXPLICIT" -eq 0 ]]; then
+    STATE_FILE="$ARTIFACTS_DIR/response_id.txt"
+  fi
 }
 
 pretty_json_to_stderr() {
@@ -151,8 +233,18 @@ QUERY_FILE=""
 QUERY_STDIN=0
 RESUME_RESPONSE_ID=""
 SUBMIT_ONLY=0
+ASSEMBLE_ONLY=0
 SHOW_PROMPT=0
+SHOW_PAYLOAD=0
 OUTPUT_JSON=""
+ARTIFACTS_DIR=""
+ARTIFACTS_ROOT=""
+REPO_ARTIFACTS=0
+CWD_ARTIFACTS=0
+RUN_LABEL=""
+STATE_FILE=".ultrathink_response_id"
+STATE_FILE_EXPLICIT=0
+WRITE_STATE_FILE=1
 
 declare -a CONTEXT_TEXTS=()
 declare -a CONTEXT_FILES=()
@@ -196,6 +288,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --submit-only)
       SUBMIT_ONLY=1
+      shift
+      ;;
+    --assemble-only)
+      ASSEMBLE_ONLY=1
       shift
       ;;
     --model)
@@ -243,8 +339,45 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_JSON="$2"
       shift 2
       ;;
+    --artifacts-dir)
+      [[ $# -ge 2 ]] || fail "Missing value for --artifacts-dir"
+      ARTIFACTS_DIR="$2"
+      shift 2
+      ;;
+    --artifacts-root)
+      [[ $# -ge 2 ]] || fail "Missing value for --artifacts-root"
+      ARTIFACTS_ROOT="$2"
+      shift 2
+      ;;
+    --repo-artifacts)
+      REPO_ARTIFACTS=1
+      shift
+      ;;
+    --cwd-artifacts)
+      CWD_ARTIFACTS=1
+      shift
+      ;;
+    --run-label)
+      [[ $# -ge 2 ]] || fail "Missing value for --run-label"
+      RUN_LABEL="$2"
+      shift 2
+      ;;
+    --state-file)
+      [[ $# -ge 2 ]] || fail "Missing value for --state-file"
+      STATE_FILE="$2"
+      STATE_FILE_EXPLICIT=1
+      shift 2
+      ;;
+    --no-state-file)
+      WRITE_STATE_FILE=0
+      shift
+      ;;
     --show-prompt)
       SHOW_PROMPT=1
+      shift
+      ;;
+    --show-payload)
+      SHOW_PAYLOAD=1
       shift
       ;;
     -h|--help)
@@ -257,9 +390,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$OPENAI_API_KEY" ]] || fail "OPENAI_API_KEY is not set in the shell environment."
-require_cmd curl
 require_cmd jq
+if [[ "$ASSEMBLE_ONLY" -eq 0 ]]; then
+  [[ -n "$OPENAI_API_KEY" ]] || fail "OPENAI_API_KEY is not set in the shell environment."
+  require_cmd curl
+fi
 
 validate_int_ge_1 "--poll-interval-sec" "$POLL_INTERVAL_SEC"
 validate_int_ge_1 "--timeout-sec" "$TIMEOUT_SEC"
@@ -267,6 +402,27 @@ validate_int_ge_1 "--max-context-chars" "$MAX_CONTEXT_CHARS"
 
 if [[ "$SUBMIT_ONLY" -eq 1 && -n "$RESUME_RESPONSE_ID" ]]; then
   fail "--submit-only cannot be combined with --resume-response-id"
+fi
+
+if [[ "$ASSEMBLE_ONLY" -eq 1 && -n "$RESUME_RESPONSE_ID" ]]; then
+  fail "--assemble-only cannot be combined with --resume-response-id"
+fi
+
+if [[ "$ASSEMBLE_ONLY" -eq 1 && "$SUBMIT_ONLY" -eq 1 ]]; then
+  fail "--assemble-only cannot be combined with --submit-only"
+fi
+
+if [[ "$ASSEMBLE_ONLY" -eq 1 && -n "$OUTPUT_JSON" ]]; then
+  fail "--assemble-only cannot be combined with --output-json (no response JSON is produced)"
+fi
+
+artifact_mode_count=0
+[[ -n "$ARTIFACTS_DIR" ]] && artifact_mode_count=$((artifact_mode_count + 1))
+[[ -n "$ARTIFACTS_ROOT" ]] && artifact_mode_count=$((artifact_mode_count + 1))
+[[ "$REPO_ARTIFACTS" -eq 1 ]] && artifact_mode_count=$((artifact_mode_count + 1))
+[[ "$CWD_ARTIFACTS" -eq 1 ]] && artifact_mode_count=$((artifact_mode_count + 1))
+if [[ "$artifact_mode_count" -gt 1 ]]; then
+  fail "Use at most one of --artifacts-dir, --artifacts-root, --repo-artifacts, or --cwd-artifacts"
 fi
 
 query_source_count=0
@@ -314,6 +470,10 @@ done
 
 response_json=""
 if [[ -n "$RESUME_RESPONSE_ID" ]]; then
+  init_artifacts_dir_if_configured
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    write_artifact_text "resume_response_id.txt" "$RESUME_RESPONSE_ID"$'\n'
+  fi
   response_json="$(api_request "GET" "${API_BASE%/}/responses/$RESUME_RESPONSE_ID")"
 else
   if [[ -n "$QUERY_FILE" ]]; then
@@ -396,21 +556,54 @@ $QUERY"
         reasoning: { effort: $reasoning_effort },
         text: { verbosity: $verbosity }
       }
+      + (if $model == "gpt-5.4-pro" then { tools: [{ type: "web_search_preview" }] } else {} end)
       + (if ($metadata | length) > 0 then { metadata: $metadata } else {} end)
       '
   )"
+
+  if [[ "$SHOW_PAYLOAD" -eq 1 ]]; then
+    echo "===== payload_json ====="
+    echo "$payload" | jq .
+    echo "===== end_payload_json ====="
+  fi
+
+  init_artifacts_dir_if_configured
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    write_artifact_text "assembled_input.txt" "$input_text"$'\n'
+    write_artifact_text "instructions.txt" "$PLAN_FIRST_INSTRUCTIONS"$'\n'
+    write_artifact_json_pretty "payload.json" "$payload"
+  fi
+
+  if [[ "$ASSEMBLE_ONLY" -eq 1 ]]; then
+    if [[ -n "$ARTIFACTS_DIR" ]]; then
+      echo "artifacts_dir: $ARTIFACTS_DIR"
+    fi
+    exit 0
+  fi
 
   response_json="$(api_request "POST" "${API_BASE%/}/responses" "$payload")"
 fi
 
 print_summary "$response_json"
 write_json_if_requested "$response_json" "$OUTPUT_JSON"
+if [[ -n "$ARTIFACTS_DIR" ]]; then
+  write_artifact_json_pretty "response_initial.json" "$response_json"
+  write_artifact_json_pretty "response.json" "$response_json"
+fi
 
 response_id="$(jq -r '.id // empty' <<<"$response_json")"
 [[ -n "$response_id" ]] || fail "Response object missing id."
-printf '%s\n' "$response_id" > ".ultrathink_response_id"
+if [[ -n "$ARTIFACTS_DIR" ]]; then
+  write_artifact_text "response_id.txt" "$response_id"$'\n'
+fi
+if [[ "$WRITE_STATE_FILE" -eq 1 ]]; then
+  printf '%s\n' "$response_id" > "$STATE_FILE"
+fi
 
 if [[ "$SUBMIT_ONLY" -eq 1 ]]; then
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    echo "artifacts_dir: $ARTIFACTS_DIR"
+  fi
   exit 0
 fi
 
@@ -436,10 +629,16 @@ while [[ "$status" == "queued" || "$status" == "in_progress" ]]; do
 
   response_json="$(api_request "GET" "${API_BASE%/}/responses/$response_id")"
   status="$(jq -r '.status // empty' <<<"$response_json")"
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    write_artifact_json_pretty "response.json" "$response_json"
+  fi
 done
 
 print_summary "$response_json"
 write_json_if_requested "$response_json" "$OUTPUT_JSON"
+if [[ -n "$ARTIFACTS_DIR" ]]; then
+  write_artifact_json_pretty "response.json" "$response_json"
+fi
 
 if [[ "$timed_out" -eq 1 && ( "$status" == "queued" || "$status" == "in_progress" ) ]]; then
   echo
@@ -455,9 +654,17 @@ if [[ -n "$output_text" ]]; then
   echo "===== ultrathink_output ====="
   echo "$output_text"
   echo "===== end_ultrathink_output ====="
+  if [[ -n "$ARTIFACTS_DIR" ]]; then
+    write_artifact_text "output.md" "$output_text"$'\n'
+  fi
 else
   echo
   echo "No output_text found in final response payload."
+fi
+
+if [[ -n "$ARTIFACTS_DIR" ]]; then
+  echo
+  echo "artifacts_dir: $ARTIFACTS_DIR"
 fi
 
 if [[ "$status" == "completed" ]]; then
