@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex App Themer"
+  short_description: "Turn image, URL, or text into Codex themes"
+  default_prompt: "Use $codex-app-themer to turn this theme idea into a valid Codex app import string and clearly label it as a dark or light theme."

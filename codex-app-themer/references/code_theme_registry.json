@@ -1,0 +1,304 @@
+{
+  "source": {
+    "derived_from_bundle_inspection": true,
+    "inspected_on": "2026-03-12",
+    "notes": [
+      "This file is bundled reference data.",
+      "The skill does not require live access to Codex.app or temporary extraction paths at runtime."
+    ]
+  },
+  "variants": {
+    "dark": [
+      "ayu",
+      "catppuccin",
+      "absolutely",
+      "codex",
+      "dracula",
+      "everforest",
+      "github",
+      "gruvbox",
+      "linear",
+      "lobster",
+      "material",
+      "matrix",
+      "monokai",
+      "night-owl",
+      "nord",
+      "notion",
+      "oscurange",
+      "one",
+      "rose-pine",
+      "sentry",
+      "solarized",
+      "tokyo-night",
+      "temple",
+      "vscode-plus"
+    ],
+    "light": [
+      "catppuccin",
+      "absolutely",
+      "codex",
+      "everforest",
+      "github",
+      "gruvbox",
+      "linear",
+      "notion",
+      "one",
+      "proof",
+      "rose-pine",
+      "solarized",
+      "vscode-plus"
+    ]
+  },
+  "themes": {
+    "absolutely": {
+      "label": "Absolutely",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Absolutely Dark",
+        "light": "Absolutely Light"
+      }
+    },
+    "ayu": {
+      "label": "Ayu",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "ayu-dark"
+      }
+    },
+    "catppuccin": {
+      "label": "Catppuccin",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "catppuccin-mocha",
+        "light": "catppuccin-latte"
+      }
+    },
+    "codex": {
+      "label": "Codex",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Codex Dark",
+        "light": "Codex Light"
+      }
+    },
+    "dracula": {
+      "label": "Dracula",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "dracula"
+      }
+    },
+    "everforest": {
+      "label": "Everforest",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "everforest-dark",
+        "light": "everforest-light"
+      }
+    },
+    "github": {
+      "label": "GitHub",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "github-dark-default",
+        "light": "github-light-default"
+      }
+    },
+    "gruvbox": {
+      "label": "Gruvbox",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "gruvbox-dark-medium",
+        "light": "gruvbox-light-medium"
+      }
+    },
+    "linear": {
+      "label": "Linear",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Linear Dark",
+        "light": "Linear Light"
+      }
+    },
+    "lobster": {
+      "label": "Lobster",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Lobster Dark"
+      }
+    },
+    "material": {
+      "label": "Material",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "material-theme-darker"
+      }
+    },
+    "matrix": {
+      "label": "Matrix",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Matrix Dark"
+      }
+    },
+    "monokai": {
+      "label": "Monokai",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "monokai"
+      }
+    },
+    "night-owl": {
+      "label": "Night Owl",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "night-owl"
+      }
+    },
+    "nord": {
+      "label": "Nord",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "nord"
+      }
+    },
+    "notion": {
+      "label": "Notion",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Notion Dark",
+        "light": "Notion Light"
+      }
+    },
+    "one": {
+      "label": "One",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "one-dark-pro",
+        "light": "one-light"
+      }
+    },
+    "oscurange": {
+      "label": "Oscurange",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Oscurange"
+      }
+    },
+    "proof": {
+      "label": "Proof",
+      "variants": [
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "light": "Proof Light"
+      }
+    },
+    "rose-pine": {
+      "label": "Rose Pine",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "rose-pine-moon",
+        "light": "rose-pine-dawn"
+      }
+    },
+    "sentry": {
+      "label": "Sentry",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Sentry Dark"
+      }
+    },
+    "solarized": {
+      "label": "Solarized",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "solarized-dark",
+        "light": "solarized-light"
+      }
+    },
+    "temple": {
+      "label": "Temple",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "Temple Dark"
+      }
+    },
+    "tokyo-night": {
+      "label": "Tokyo Night",
+      "variants": [
+        "dark"
+      ],
+      "registrationNameByVariant": {
+        "dark": "tokyo-night"
+      }
+    },
+    "vscode-plus": {
+      "label": "VS Code Plus",
+      "variants": [
+        "dark",
+        "light"
+      ],
+      "registrationNameByVariant": {
+        "dark": "dark-plus",
+        "light": "light-plus"
+      }
+    }
+  }
+}
