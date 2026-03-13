@@ -117,6 +117,22 @@ python "$CODEX_HOME/skills/codex-app-themer/scripts/encode_codex_theme.py" <<'JS
 JSON
 ```
 
+On macOS/Linux, calling the Python script directly is fine. On Windows, if `python` resolves to the Microsoft Store shim or is missing, prefer the PowerShell wrapper in `scripts/encode_codex_theme.ps1`; it tries `python`, then `python3`, then `py -3`, and finally `uv run`.
+
+You can also avoid shell-quoting issues by using a file-backed payload:
+
+```bash
+python "$CODEX_HOME/skills/codex-app-themer/scripts/encode_codex_theme.py" \
+  --json-file payload.json --portable-only
+```
+
+PowerShell / Windows example:
+
+```powershell
+& "$env:CODEX_HOME\skills\codex-app-themer\scripts\encode_codex_theme.ps1" `
+  -JsonPath .\payload.json -PortableOnly
+```
+
 The script returns normalized JSON with:
 - `themeTypeLabel`
 - `codeThemeId`
@@ -128,6 +144,13 @@ Before replying, validate the exact final string you plan to show:
 ```bash
 python "$CODEX_HOME/skills/codex-app-themer/scripts/encode_codex_theme.py" \
   --share-string 'codex-theme-v1:%7B...%7D'
+```
+
+PowerShell / Windows validation example:
+
+```powershell
+& "$env:CODEX_HOME\skills\codex-app-themer\scripts\encode_codex_theme.ps1" `
+  -ShareString 'codex-theme-v1:%7B...%7D'
 ```
 
 If this round-trip fails, do not present the string. Fix the payload first.

@@ -13,6 +13,10 @@ from urllib.parse import quote, unquote
 
 HEX_COLOR_LENGTH = 7
 DEFAULT_REGISTRY = Path(__file__).resolve().parent.parent / "references" / "code_theme_registry.json"
+POWERSHELL_JSON_HINT = (
+    " On PowerShell, prefer piping stdin, using --json @payload.json, "
+    "or the encode_codex_theme.ps1 wrapper."
+)
 DEFAULTS = {
     "dark": {
         "accent": "#5ba2ff",
@@ -195,13 +199,62 @@ def build_output(payload: dict[str, Any], registry: dict[str, Any]) -> dict[str,
     }
 
 
+def read_text_from_source(field_name: str, value: str) -> str:
+    if not isinstance(value, str):
+        raise ThemeEncodingError(f"{field_name} must be a string")
+
+    normalized = value.strip()
+    if normalized == "@-":
+        return sys.stdin.read()
+    if normalized.startswith("@"):
+        path = Path(normalized[1:]).expanduser()
+        try:
+            return path.read_text(encoding="utf-8-sig")
+        except OSError as exc:
+            raise ThemeEncodingError(f"{field_name} file '{path}' could not be read") from exc
+    return value
+
+
+def parse_json_payload(raw: str, source_name: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        hint = POWERSHELL_JSON_HINT if source_name == "--json" else ""
+        raise ThemeEncodingError(f"Could not parse JSON from {source_name}.{hint}") from exc
+    if not isinstance(payload, dict):
+        raise ThemeEncodingError(f"{source_name} payload must be an object")
+    return payload
+
+
+def read_text_file(field_name: str, path_str: str) -> str:
+    path = Path(path_str).expanduser()
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise ThemeEncodingError(f"{field_name} file '{path}' could not be read") from exc
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    json_sources = sum(bool(source) for source in (args.json, args.json_file))
+    share_sources = sum(bool(source) for source in (args.share_string, args.share_string_file))
+
+    if json_sources > 1:
+        raise ThemeEncodingError("Use only one of --json or --json-file")
+    if share_sources > 1:
+        raise ThemeEncodingError("Use only one of --share-string or --share-string-file")
+    if json_sources and share_sources:
+        raise ThemeEncodingError("Use either JSON input or a share string, not both")
+
+
 def read_payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.json:
-        return json.loads(args.json)
+        return parse_json_payload(read_text_from_source("--json", args.json), "--json")
+    if args.json_file:
+        return parse_json_payload(read_text_file("--json-file", args.json_file), "--json-file")
     raw = sys.stdin.read().strip()
     if not raw:
-        raise ThemeEncodingError("Provide a JSON payload via --json or stdin")
-    return json.loads(raw)
+        raise ThemeEncodingError("Provide a JSON payload via --json, --json-file, or stdin")
+    return parse_json_payload(raw, "stdin")
 
 
 def run_self_test() -> None:
@@ -236,11 +289,31 @@ def run_self_test() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--json", help="Theme payload as a JSON string.")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python encode_codex_theme.py --json-file payload.json --portable-only\n"
+            "  type payload.json | uv run --python 3.12 encode_codex_theme.py --portable-only\n"
+            "  encode_codex_theme.ps1 -JsonPath payload.json -PortableOnly"
+        ),
+    )
+    parser.add_argument(
+        "--json",
+        help="Theme payload as JSON, @path/to/file.json, or @- to read stdin.",
+    )
+    parser.add_argument(
+        "--json-file",
+        help="Path to a JSON payload file.",
+    )
     parser.add_argument(
         "--share-string",
-        help="Existing codex-theme-v1 string to validate and normalize.",
+        help="Existing codex-theme-v1 string, @path/to/file.txt, or @- to read stdin.",
+    )
+    parser.add_argument(
+        "--share-string-file",
+        help="Path to a file containing a codex-theme-v1 string.",
     )
     parser.add_argument(
         "--registry",
@@ -252,22 +325,35 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run a built-in validation check and exit.",
     )
+    parser.add_argument(
+        "--portable-only",
+        action="store_true",
+        help="Print only the final codex-theme-v1 string.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    validate_args(args)
     if args.self_test:
         run_self_test()
         return 0
 
     registry = load_registry(Path(args.registry))
-    if args.share_string:
-        output = decode_share_string(args.share_string, registry)
+    if args.share_string or args.share_string_file:
+        share_string = args.share_string
+        if args.share_string_file:
+            share_string = read_text_file("--share-string-file", args.share_string_file)
+        output = decode_share_string(read_text_from_source("--share-string", share_string), registry)
     else:
         output = build_output(read_payload(args), registry)
-    json.dump(output, sys.stdout, indent=2)
-    sys.stdout.write("\n")
+    if args.portable_only:
+        sys.stdout.write(output["portableString"])
+        sys.stdout.write("\n")
+    else:
+        json.dump(output, sys.stdout, indent=2)
+        sys.stdout.write("\n")
     return 0
 
 
